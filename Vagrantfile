@@ -1,6 +1,12 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
+guestname = "DC1"
+guestip   = "192.168.5.1"
+domainname= "EN63366"
+realm     = "EN63366.local"
+
+
 # All Vagrant configuration is done below. The "2" in Vagrant.configure
 # configures the configuration version (we support older styles for
 # backwards compatibility). Please don't change it unless you know what
@@ -13,6 +19,8 @@ Vagrant.configure("2") do |config|
   # Every Vagrant development environment requires a box. You can search for
   # boxes at https://atlas.hashicorp.com/search.
   config.vm.box = "debian/jessie64"
+
+  config.vm.hostname = guestname
 
   # Disable automatic box update checking. If you disable this, then
   # boxes will only be checked for updates when the user runs
@@ -27,7 +35,7 @@ Vagrant.configure("2") do |config|
   # Create a private network, which allows host-only access to the machine
   # using a specific IP.
   # config.vm.network "private_network", ip: "192.168.33.10"
-  config.vm.network "private_network", ip: "192.168.5.1",
+  config.vm.network "private_network", ip: guestip,
     virtualbox__intnet: true
 
   # Create a public network, which generally matched to bridged network.
@@ -76,6 +84,15 @@ Vagrant.configure("2") do |config|
     apt-get install -y samba
     rm -f /etc/samba/smb.conf
     samba-tool domain provision --use-rfc2307 --realm=EN63366.local --domain=EN63366 --server-role=dc --adminpass=E97GpFhkMFzAu55DSFL --option="interfaces=lo eth1" --option="bind interfaces only=yes"
-    sudo apt-get install winbind
+    apt-get install -y smbclient
+    apt-get install -y winbind
+
+    echo "domain EN63366.local" > /etc/resolv.conf
+    echo "nameserver 192.168.5.1" >> /etc/resolv.conf 
+
+    # host -t SRV _ldap._tcp.EN63366.local.
+    # host -t SRV _kerberos._udp.EN63366.local.
+    # host -t A jessie.EN63366.local.
+    
   SHELL
 end
