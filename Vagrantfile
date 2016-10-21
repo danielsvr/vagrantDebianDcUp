@@ -87,30 +87,25 @@ Vagrant.configure("2") do |config|
   addDomainToDnsInfo = addDomainToDnsInfo + "echo 'dns-nameservers " + guestip + "' >> /etc/network/interfaces" 
   config.vm.provision "shell", inline: addDomainToDnsInfo
 
+  addDomainToDnsInfo = 'sed -i "s/\#supersede domain-name.*/supersede domain-name \"' + realm + '\";/" /etc/dhcp/dhclient.conf' + "\n"
+  addDomainToDnsInfo = addDomainToDnsInfo + 'sed -i "s/\#prepend domain-name-servers.*/prepend domain-name-servers ' + guestip + ';/" /etc/dhcp/dhclient.conf' + "\n"
+  addDomainToDnsInfo = addDomainToDnsInfo + 'dhclient'
+  config.vm.provision "shell", inline: addDomainToDnsInfo
 
   config.vm.provision "shell", inline: <<-SHELL
-    apt-get update
-    # apt-get install -y resolvconf #<< -- this restarts the network and vagrant hangs 
-    # try not to restart network before finishing the provisioning
-    #/etc/init.d/networking restart
-    #resolvconf -u 
+   apt-get update
+   apt-get install -y samba
+   rm -f /etc/samba/smb.conf
+   samba-tool domain provision --use-rfc2307 --realm=EN63366.local --domain=EN63366 --server-role=dc --adminpass=E97GpFhkMFzAu55DSFL --option="interfaces=lo eth1" --option="bind interfaces only=yes"
+   apt-get install -y smbclient
+   apt-get install -y winbind
+  
+   # echo "domain EN63366.local" > /etc/resolv.conf
+   # echo "nameserver 192.168.5.2" >> /etc/resolv.conf 
+  
+   # host -t SRV _ldap._tcp.EN63366.local.
+   # host -t SRV _kerberos._udp.EN63366.local.
+   # host -t A DC1.EN63366.local.
+  
   SHELL
-
-
-  #config.vm.provision "shell", inline: <<-SHELL
-  #  apt-get update
-  #  apt-get install -y samba
-  #  rm -f /etc/samba/smb.conf
-  #  samba-tool domain provision --use-rfc2307 --realm=EN63366.local --domain=EN63366 --server-role=dc --adminpass=E97GpFhkMFzAu55DSFL --option="interfaces=lo eth1" --option="bind interfaces only=yes"
-  #  apt-get install -y smbclient
-  #  apt-get install -y winbind
-  #
-  #  # echo "domain EN63366.local" > /etc/resolv.conf
-  #  # echo "nameserver 192.168.5.2" >> /etc/resolv.conf 
-  #
-  #  # host -t SRV _ldap._tcp.EN63366.local.
-  #  # host -t SRV _kerberos._udp.EN63366.local.
-  #  # host -t A DC1.EN63366.local.
-  #
-  #SHELL
 end
