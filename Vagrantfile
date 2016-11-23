@@ -1,10 +1,12 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
-guestname = "DC1"
-guestip   = "192.168.5.1" # try don't use *.1, vagrant complains; but samba might what *.1 
-domainname= "EN63366"
-realm     = "EN63366.local"
+guestname                   = "DC1"
+guestip                     = "192.168.5.1" # try don't use *.1, vagrant complains; but samba might what *.1 
+domainname                  = "EN63366"
+realm                       = "EN63366.local"
+adminpass                   = E97GpFhkMFzAu55DSFL
+private_network_dns_address = 10.0.2.3
 
 
 Vagrant.configure("2") do |config|
@@ -18,46 +20,56 @@ Vagrant.configure("2") do |config|
   config.vm.synced_folder "./data", "/vagrant_data", type: "virtualbox"
 
   # <<-taking care of dns resolution configuration 
-  modifyHosts = 'sed -i "s/.*' + guestname + '/' + guestip + '    ' + guestname + '.' + realm + '    ' + guestname + '/" /etc/hosts'
-  config.vm.provision "shell", keep_color: true, run: "always", inline: modifyHosts
+  config.vm.provision "shell", keep_color: true, run: "always", 
+    inline: %{sed -i "s/.*#{guestname}/#{guestip}    #{guestname}.#{realm}    #{guestname}/" /etc/hosts}
 
-  addDomainToDnsInfo = "echo 'dns-domain " + realm + "' >> /etc/network/interfaces\n"
-  addDomainToDnsInfo = addDomainToDnsInfo + "echo 'dns-nameservers " + guestip + "' >> /etc/network/interfaces" 
-  config.vm.provision "shell", keep_color: true, inline: addDomainToDnsInfo
+  config.vm.provision "shell", keep_color: true, 
+    inline: %{
+      echo 'dns-domain #{realm}' >> /etc/network/interfaces
+      echo 'dns-nameservers #{guestip}' >> /etc/network/interfaces
+    }
 
-  addDomainToDnsInfo = 'sed -i "s/\#supersede domain-name.*/supersede domain-name \"' + realm + '\";/" /etc/dhcp/dhclient.conf' + "\n"
-  addDomainToDnsInfo = addDomainToDnsInfo + 'sed -i "s/\#prepend domain-name-servers.*/prepend domain-name-servers ' + guestip + ';/" /etc/dhcp/dhclient.conf' + "\n"
-  addDomainToDnsInfo = addDomainToDnsInfo + 'dhclient'
-  config.vm.provision "shell", keep_color: true, inline: addDomainToDnsInfo
+  config.vm.provision "shell", keep_color: true, 
+    inline: %{
+      sed -i "s/\#supersede domain-name.*/supersede domain-name \"#{realm}\";/" /etc/dhcp/dhclient.conf
+      sed -i "s/\#prepend domain-name-servers.*/prepend domain-name-servers #{guestip};/" /etc/dhcp/dhclient.conf
+      dhclient
+    }
   # DONE: taking care of dns resolution configuration
 
   # make sure that aptitude is up to date 
-  config.vm.provision "shell", keep_color: true, inline: "apt-get update"
+  config.vm.provision "shell", keep_color: true, 
+    inline: "apt-get update"
   # install samba, before winbind
-  config.vm.provision "shell", keep_color: true, inline: "apt-get install -y samba"
-  # install winbind
-  config.vm.provision "shell", keep_color: true, inline: "apt-get install -y winbind"
-  # install sambclient, for testing
-  config.vm.provision "shell", keep_color: true, inline: "apt-get install -y smbclient"
+  config.vm.provision "shell", keep_color: true, 
+    inline: "apt-get install -y samba  winbind smbclient"
+  config.vm.provision "shell", keep_color: true, 
+    inline: %{
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get install -y krb5-user
+    }
 
   # unattedentd domain controller config
-  config.vm.provision "shell", keep_color: true, inline: <<-SHELL
-rm -f /etc/samba/smb.conf
-samba-tool domain provision --use-rfc2307 --realm=EN63366.local --domain=EN63366 --server-role=dc --adminpass=E97GpFhkMFzAu55DSFL --option="interfaces=lo eth1" --option="bind interfaces only=yes"
-
-/etc/init.d/samba restart
-SHELL
+  config.vm.provision "shell", keep_color: true, 
+    inline: %{
+      rm -f /etc/samba/smb.conf
+      samba-tool domain provision --use-rfc2307 --realm=#{realm} --domain=#{domainname} --server-role=dc --adminpass=#{adminpass} --option="interfaces=lo eth1" --option="bind interfaces only=yes"
+      sed -i "s/\sdns forwarder =.*/dns forwarder = ' + #{private_network_dns_address} + '/" /etc/samba/smb.conf
+      /etc/init.d/samba restart
+    }
 
   # testing that DNS works correctly
-  config.vm.provision "shell", keep_color: true, run: "always", inline: <<-SHELL
-host -t SRV _ldap._tcp.EN63366.local.
-host -t SRV _kerberos._udp.EN63366.local.
-host -t A DC1.EN63366.local.
-SHELL
+  config.vm.provision "shell", keep_color: true, run: "always", 
+    inline: %{
+      host -t SRV _ldap._tcp.#{realm}.
+      host -t SRV _kerberos._udp.#{realm}.
+      host -t A #{guestname}.#{realm}.
+    }
 
-  config.vm.provision "shell", inline: <<-SHELL
-rm /etc/krb5.conf 2> nul
-ln -sf /usr/local/samba/private/krb5.conf /etc/krb5.conf
-SHELL
+  config.vm.provision "shell", 
+    inline: %{
+      rm /etc/krb5.conf 2> nul
+      ln -sf /var/lib/samba/private/krb5.conf /etc/krb5.conf
+    }
 
 end
